@@ -44,6 +44,21 @@ io.on("connection", (socket) => {
       });
     });
   });
+
+  // when user disconnects
+
+  socket.on("disconnecting", () => {
+    const rooms = [...socket.rooms];
+    rooms.forEach((roomid) => {
+      //emit- sending the specific user leavingg room msg to others
+      socket.in(roomid).emit("disconnected", {
+        socket_id: socket.id,
+        username: userSocketMap[socket.id], // accessing thhe key (userSocketMap.socket_id) similar
+      });
+    });
+    delete userSocketMap[socket.id];
+    socket.leave();
+  });
 });
 
 app.get("/", (req, res) => {
