@@ -8,17 +8,14 @@ const server = createServer(app);
 const io = new Server(server);
 
 const userSocketMap = {};
-// {
-//   "random room id vmirvnrkvnrekjfre" : "username",
-//   "randomid 2 KEY " : "username 2 VALUE",
-// } in this format data will be stored in userSocketMap
 
-const getAllUsers = (roid) => {
-  return Array.from(io.sockets.adapter.rooms.get(roid) || []).map(
-    (socket_id) => {
+// Utility function to get all users in a room
+const getAllUsers = (roomId) => {
+  return Array.from(io.sockets.adapter.rooms.get(roomId) || []).map(
+    (socketId) => {
       return {
-        socket_id,
-        username: userSocketMap[socket_id],
+        socketId,
+        username: userSocketMap[socketId],
       };
     }
   );
@@ -27,44 +24,54 @@ const getAllUsers = (roid) => {
 io.on("connection", (socket) => {
   console.log("socket connection", socket.id);
 
-  // receivieng from frontend
-  socket.on("joinRoom", ({ roomid, username }) => {
-    // storing the username as KEY  in userSocketMap
+  // Handle joinRoom event
+  socket.on("joinRoom", ({ roomId, username }) => {
     userSocketMap[socket.id] = username;
-    socket.join(roomid); //entering the new user in the defined roomid
-    const allUsers = getAllUsers(roomid); //getting all users from the room
+    socket.join(roomId);
+
+    const allUsers = getAllUsers(roomId);
     console.log(allUsers);
-    // send notif to other users when new user joins
-    allUsers.forEach(({ socket_id }) => {
-      //when new user joins room
-      io.to(socket_id).emit("joined", {
+
+    // Notify other users that a new user has joined
+    allUsers.forEach(({ socketId }) => {
+      io.to(socketId).emit("joined", {
         allUsers,
         username,
-        socketid: socket.id,
+        socketId: socket.id,
       });
     });
+
+    // Request code sync for the new user
+    socket.emit("requestCodeSync");
   });
 
-  // when user disconnects
+  // Handle code change event
+  socket.on("code-change", ({ roomId, code }) => {
+    socket.to(roomId).emit("code-change", { code });
+  });
 
+  // Sync code to new user
+  socket.on("syncCode", ({ socketId, code }) => {
+    io.to(socketId).emit("code-change", { code });
+  });
+
+  // Handle user disconnection
   socket.on("disconnecting", () => {
     const rooms = [...socket.rooms];
-    rooms.forEach((roomid) => {
-      //emit- sending the specific user leavingg room msg to others
-      socket.in(roomid).emit("disconnected", {
-        socket_id: socket.id,
-        username: userSocketMap[socket.id], // accessing thhe key (userSocketMap.socket_id) similar
+    rooms.forEach((roomId) => {
+      socket.in(roomId).emit("disconnected", {
+        socketId: socket.id,
+        username: userSocketMap[socket.id],
       });
     });
     delete userSocketMap[socket.id];
-    socket.leave();
   });
 });
 
 app.get("/", (req, res) => {
-  res.send("madhua");
+  res.send("Hello from the server!");
 });
 
 server.listen(3333, () => {
-  console.log("server onn d >>>>>>>>>>>>>>>");
+  console.log("Server running on port 3333");
 });
